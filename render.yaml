@@ -1,0 +1,45 @@
+# Render Blueprint — deploys the whole platform.
+# In Render: New → Blueprint → connect this GitHub repo → Apply.
+#
+# The database is external (TiDB Cloud). The ONLY value you must paste by hand
+# is DATABASE_URL (it holds your TiDB password — a secret, so it is not committed).
+# Everything else is preset below.
+
+services:
+  # ---------- Backend API (FastAPI) ----------
+  - type: web
+    name: dataflow-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # SECRET — paste your TiDB URL in the Render dashboard after first deploy:
+      #   mysql+pymysql://<user>:<password>@<host>:4000/<db>
+      - key: DATABASE_URL
+        sync: false
+      # Render generates a strong random secret for signing JWTs:
+      - key: JWT_SECRET
+        generateValue: true
+      # Frontend origin allowed to call the API (matches the static site URL below):
+      - key: CORS_ORIGINS
+        value: https://dataflow-web.onrender.com
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"
+
+  # ---------- Frontend (React static site) ----------
+  - type: web
+    name: dataflow-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      # Points the app at the backend service URL above (embedded at build time):
+      - key: VITE_API_URL
+        value: https://dataflow-api.onrender.com
+    routes:
+      - type: rewrite # SPA: send all paths to index.html
+        source: /*
+        destination: /index.html
