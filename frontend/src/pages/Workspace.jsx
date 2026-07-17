@@ -14,17 +14,27 @@ function parseArrayLiteral(code, name) {
   if (!m) return null;
   try {
     return JSON.parse(m[1].replace(/'/g, '"').replace(/#[^\n]*/g, "").replace(/,(\s*[\]}])/g, "$1"));
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
-
 function buildInject(orders, dimensions) {
   let s = "import pandas as pd\norders = " + JSON.stringify(orders) + "\n";
-  for (const [name, tbl] of Object.entries(dimensions || {})) {
+  for (const [name, tbl] of Object.entries(dimensions || {}))
     s += `${name} = pd.DataFrame(${JSON.stringify(tbl.rows)}, columns=${JSON.stringify(tbl.columns)})\n`;
-  }
   return s;
+}
+function toCSV(t) {
+  const esc = (c) => (typeof c === "string" && /[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+  return [t.columns.join(","), ...t.rows.map((r) => r.map(esc).join(","))].join("\n");
+}
+function toJSON(t) {
+  return JSON.stringify(t.rows.map((r) => Object.fromEntries(t.columns.map((c, i) => [c, r[i]]))), null, 2);
+}
+function download(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function Workspace() {
@@ -35,29 +45,30 @@ export default function Workspace() {
   const [title, setTitle] = useState(template.title);
   const [stages, setStages] = useState(() => template.stages.map((s) => ({ ...s })));
   const [orch, setOrch] = useState(() => ({ ...template.orchestrator }));
+  const [config, setConfig] = useState({ retries: 2, loadMode: "append", injectFail: "" });
   const [selected, setSelected] = useState(template.stages[0].key);
   const [status, setStatus] = useState({});
   const [metrics, setMetrics] = useState({});
-  const [log, setLog] = useState("");
+  const [logs, setLogs] = useState([]);
   const [running, setRunning] = useState(false);
   const [saved, setSaved] = useState("");
   const [chart, setChart] = useState(null);
   const [warehouse, setWarehouse] = useState(null);
   const [runs, setRuns] = useState([]);
   const loadedId = useRef(null);
+  const consoleRef = useRef(null);
 
   useEffect(() => {
     if (projectId) return;
     setTitle(template.title);
     setStages(template.stages.map((s) => ({ ...s })));
     setOrch({ ...template.orchestrator });
+    setConfig({ retries: 2, loadMode: "append", injectFail: "" });
     setSelected(template.stages[0].key);
-    setStatus({}); setMetrics({}); setLog(""); setChart(null); setWarehouse(null);
+    setStatus({}); setMetrics({}); setLogs([]); setChart(null); setWarehouse(null);
   }, [template, projectId]);
 
-  const loadRuns = async (pid) => {
-    try { setRuns(await api.getRuns(pid)); } catch { setRuns([]); }
-  };
+  const loadRuns = async (pid) => { try { setRuns(await api.getRuns(pid)); } catch { setRuns([]); } };
 
   useEffect(() => {
     if (!projectId) { loadRuns(); return; }
@@ -71,62 +82,85 @@ export default function Workspace() {
         const c = JSON.parse(p.content_json || "{}");
         if (Array.isArray(c.stages)) setStages(c.stages);
         if (c.orchestrator) setOrch(c.orchestrator);
+        if (c.config) setConfig((cf) => ({ ...cf, ...c.config }));
         if (Array.isArray(c.stages) && c.stages[0]) setSelected(c.stages[0].key);
       } catch {}
       loadRuns(p.id);
     })();
   }, [projectId]);
 
+  useEffect(() => {
+    if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+  }, [logs]);
+
   const setStageCode = (key, code) => setStages((s) => s.map((st) => (st.key === key ? { ...st, code } : st)));
   const setSt = (key, val) => setStatus((s) => ({ ...s, [key]: val }));
   const setMetric = (key, val) => setMetrics((m) => ({ ...m, [key]: val }));
 
   const runPipeline = async () => {
-    setRunning(true); setLog(""); setStatus({}); setMetrics({}); setChart(null); setWarehouse(null);
+    setRunning(true); setLogs([]); setStatus({}); setMetrics({}); setChart(null); setWarehouse(null);
     const t0 = Date.now();
-    let logText = "";
-    const append = (l) => { logText += l + "\n"; setLog(logText); };
+    const entries = [];
+    const push = (type, text) => { entries.push({ type, text }); setLogs([...entries]); };
 
-    let orders = [];
-    let sparkResult = null;
-    let failed = false, failStage = null;
+    let orders = [], sparkResult = null, failed = false, failStage = null;
 
     for (const stage of stages) {
       setSt(stage.key, "run");
       await sleep(300);
+      push("head", `${stage.icon} ${stage.label}`);
       const s0 = Date.now();
+
+      // Retry & failure simulation (Airflow-style)
+      if (stage.key === config.injectFail) {
+        if (config.retries >= 1) {
+          push("warn", `attempt 1 failed — injected failure 💥`);
+          for (let a = 1; a <= config.retries; a++) {
+            push("info", `↻ Airflow retrying (${a}/${config.retries})…`);
+            await sleep(450);
+          }
+          push("ok", `recovered on retry — task is idempotent, so re-running was safe`);
+        } else {
+          push("err", `failed and retries = 0 → pipeline stopped`);
+          failed = true; failStage = stage.key; break;
+        }
+      }
 
       if (stage.kind === "kafka") {
         const msgs = parseArrayLiteral(stage.code, "messages") || [];
         orders = msgs;
-        append(`▶ ${stage.label}: produced ${msgs.length} events → topic`);
+        push("info", `→ produced ${msgs.length} events to topic`);
+        push("ok", `${msgs.length} messages sent`);
         setMetric(stage.key, `${msgs.length} msgs`);
       } else if (stage.kind === "spark") {
-        append(`▶ ${stage.label}: running (real Python)…`);
-        const res = await runPython(buildInject(orders, template.dimensions) + "\n" + stage.code, (m) => append("  " + m));
-        append(res.output.trim().split("\n").map((l) => "  " + l).join("\n"));
-        if (!res.ok) { failed = true; failStage = stage.key; append("✗ Spark stage failed."); break; }
+        push("info", `running distributed job (real Python)…`);
+        const res = await runPython(buildInject(orders, template.dimensions) + "\n" + stage.code, (m) => push("info", m));
+        res.output.trim().split("\n").forEach((l) => l && push("out", l));
+        if (!res.ok) { failed = true; failStage = stage.key; push("err", "Spark stage failed"); break; }
         sparkResult = res.table;
         if (res.table) setChart(res.table);
-        setMetric(stage.key, `${orders.length}→${res.table ? res.table.rows.length : "?"} rows · ${Date.now() - s0}ms`);
+        const out = res.table ? res.table.rows.length : "?";
+        push("ok", `processed ${orders.length} in → ${out} out (${Date.now() - s0}ms)`);
+        setMetric(stage.key, `${orders.length}→${out} · ${Date.now() - s0}ms`);
       } else if (stage.kind === "quality") {
-        append(`▶ ${stage.label}: validating data…`);
-        const res = await runPython(stage.code, (m) => append("  " + m));
-        append(res.output.trim().split("\n").map((l) => "  " + l).join("\n"));
+        push("info", `validating data (assertions)…`);
+        const res = await runPython(stage.code, (m) => push("info", m));
+        res.output.trim().split("\n").forEach((l) => l && push("out", l));
         if (!res.ok) {
           failed = true; failStage = stage.key;
-          append("✗ Data quality check FAILED — pipeline stopped (bad data not loaded).");
+          push("err", "DATA QUALITY CHECK FAILED — bad data blocked, pipeline stopped");
           break;
         }
+        push("ok", "all quality checks passed");
         setMetric(stage.key, "✓ passed");
       } else if (stage.kind === "snowflake") {
-        append(`▶ ${stage.label}: loading + transforming (real SQL)…`);
-        if (!sparkResult) { append("  (no Spark result to load)"); }
+        push("info", `loading into warehouse (mode: ${config.loadMode}) + running SQL…`);
+        if (!sparkResult) push("warn", "no Spark result to load");
         else {
-          const res = await runSqlOnData("results", sparkResult, stage.code, (m) => append("  " + m));
-          if (!res.ok) { failed = true; failStage = stage.key; append("✗ SQL error: " + res.error); break; }
+          const res = await runSqlOnData("results", sparkResult, stage.code, (m) => push("info", m));
+          if (!res.ok) { failed = true; failStage = stage.key; push("err", "SQL error: " + res.error); break; }
           setWarehouse({ columns: res.columns, rows: res.rows });
-          append(`  ✓ loaded ${sparkResult.rows.length} rows into '${stage.table}', ran SQL → ${res.rows.length} rows`);
+          push("ok", `loaded ${sparkResult.rows.length} rows into '${stage.table}' → SQL returned ${res.rows.length} rows`);
           setMetric(stage.key, `${res.rows.length} rows`);
         }
       }
@@ -136,14 +170,14 @@ export default function Workspace() {
 
     if (failed) {
       setSt(failStage, "err");
+      push("head", "❌ Pipeline failed");
     } else {
       setSt("orchestrator", "run");
-      append("▶ Airflow: orchestrating DAG…");
+      push("head", "🗓️ Airflow — marking DAG run successful");
       const tasks = parseArrayLiteral(orch.code, "tasks") || [];
-      for (const t of tasks) { await sleep(300); append(`  ✓ ${t} success`); }
-      setSt("orchestrator", "done");
-      setSt("output", "done");
-      append("\n✓ Pipeline complete — results in the warehouse.");
+      for (const t of tasks) { await sleep(250); push("ok", `${t}`); }
+      setSt("orchestrator", "done"); setSt("output", "done");
+      push("head", "✅ Pipeline complete — data is in the warehouse");
     }
 
     const duration = Date.now() - t0;
@@ -151,19 +185,19 @@ export default function Workspace() {
     try {
       await api.createRun({
         project_id: loadedId.current || null, title, template_id: template.id,
-        status: failed ? "failed" : "success", duration_ms: duration, log: logText.slice(0, 4000),
+        status: failed ? "failed" : "success", duration_ms: duration,
+        log: entries.map((e) => e.text).join("\n").slice(0, 4000),
       });
       loadRuns(loadedId.current || undefined);
     } catch {}
   };
 
   const save = async () => {
-    const content = JSON.stringify({ templateId: template.id, stages, orchestrator: orch });
+    const content = JSON.stringify({ templateId: template.id, stages, orchestrator: orch, config });
     try {
       if (loadedId.current) await api.updateProject(loadedId.current, { title, type: "capstone", content_json: content });
       else { const p = await api.createProject({ title, type: "capstone", content_json: content }); loadedId.current = p.id; }
-      setSaved("Saved ✓");
-      setTimeout(() => setSaved(""), 2000);
+      setSaved("Saved ✓"); setTimeout(() => setSaved(""), 2000);
     } catch (e) { setSaved("Save failed: " + e.message); }
   };
 
@@ -172,12 +206,24 @@ export default function Workspace() {
   const current = editingOrch ? orch : stages.find((s) => s.key === selected);
   const schedule = orch.code.match(/schedule\s*=\s*"([^"]+)"/)?.[1] || "@daily";
 
+  const logStyle = (type) => ({
+    head: { color: "#e7ebf2", fontWeight: 600, marginTop: 8, borderTop: "1px solid rgba(255,255,255,.06)", paddingTop: 6 },
+    info: { color: "#8b93a7", paddingLeft: 16 },
+    out: { color: "#c8ccd0", paddingLeft: 16, fontFamily: "var(--mono)" },
+    ok: { color: "#7fd18c", paddingLeft: 16 },
+    warn: { color: "#f5b74e", paddingLeft: 16 },
+    err: { color: "#ff8080", fontWeight: 600, paddingLeft: 16 },
+  }[type] || {});
+  const logPrefix = (type) => ({ info: "", out: "", ok: "✓ ", warn: "⚠ ", err: "✗ " }[type] || "");
+
+  const sinkTable = stages.find((s) => s.kind === "snowflake")?.table || "warehouse";
+
   return (
     <div className="content" style={{ maxWidth: 1180 }}>
       <div className="row between wrap">
         <div className="row" style={{ gap: 10 }}>
           <span style={{ fontSize: 26 }}>{template.icon}</span>
-          <input className="input" style={{ width: 300, fontWeight: 700 }} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className="input" style={{ width: 280, fontWeight: 700 }} value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div className="row">
           {saved && <span className="muted" style={{ fontSize: 13 }}>{saved}</span>}
@@ -187,11 +233,31 @@ export default function Workspace() {
       </div>
 
       <div className="card mt-3" style={{ padding: 14 }}>
-        <button onClick={() => setSelected("orchestrator")} className="pill"
-          style={{ color: "#6c8cff", borderColor: editingOrch ? "#6c8cff" : "rgba(108,140,255,.4)", cursor: "pointer", background: editingOrch ? "var(--surface-2)" : undefined }}>
-          🗓️ Airflow orchestrates · runs {schedule}
-          <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: "50%", background: dot(status.orchestrator), display: "inline-block" }} />
-        </button>
+        <div className="row between wrap" style={{ gap: 10 }}>
+          <button onClick={() => setSelected("orchestrator")} className="pill"
+            style={{ color: "#6c8cff", borderColor: editingOrch ? "#6c8cff" : "rgba(108,140,255,.4)", cursor: "pointer", background: editingOrch ? "var(--surface-2)" : undefined }}>
+            🗓️ Airflow · {schedule}
+            <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: "50%", background: dot(status.orchestrator), display: "inline-block" }} />
+          </button>
+          {/* Pipeline config */}
+          <div className="row wrap" style={{ gap: 10, fontSize: 12 }}>
+            <label className="muted">⚙️ Retries
+              <input type="number" min="0" max="5" value={config.retries} onChange={(e) => setConfig({ ...config, retries: +e.target.value })}
+                style={{ width: 46, marginLeft: 6 }} className="input" />
+            </label>
+            <label className="muted">Load mode
+              <select value={config.loadMode} onChange={(e) => setConfig({ ...config, loadMode: e.target.value })} className="input" style={{ marginLeft: 6, width: 110 }}>
+                <option value="append">append</option><option value="overwrite">overwrite</option><option value="merge">merge</option>
+              </select>
+            </label>
+            <label className="muted">💥 Inject failure
+              <select value={config.injectFail} onChange={(e) => setConfig({ ...config, injectFail: e.target.value })} className="input" style={{ marginLeft: 6, width: 120 }}>
+                <option value="">none</option>
+                {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
 
         <div className="diagram mt-2" style={{ marginBottom: 0, borderStyle: "solid" }}>
           {stages.map((b) => (
@@ -199,7 +265,7 @@ export default function Workspace() {
               <button onClick={() => setSelected(b.key)} className={`node ${status[b.key] === "run" ? "stage-active" : ""}`}
                 style={{ background: selected === b.key ? "var(--surface-2)" : "var(--bg-2)", color: b.color,
                   border: `2px solid ${selected === b.key ? b.color : status[b.key] === "done" ? "var(--accent)" : status[b.key] === "err" ? "var(--danger)" : "var(--border)"}`,
-                  cursor: "pointer", minWidth: 116 }}>
+                  cursor: "pointer", minWidth: 112 }}>
                 <div style={{ fontSize: 19 }} className={status[b.key] === "run" ? "spin" : ""}>{b.icon}</div>
                 <div style={{ fontSize: 12 }}>{b.label}</div>
                 <div style={{ marginTop: 3 }}>
@@ -211,9 +277,8 @@ export default function Workspace() {
             </div>
           ))}
           <div className={`node ${status.output === "run" ? "stage-active" : ""}`}
-            style={{ background: "#0f2a22", color: "var(--accent)", border: `2px solid ${status.output === "done" ? "var(--accent)" : "var(--border)"}`, minWidth: 104 }}>
-            <div style={{ fontSize: 19 }}>📊</div>
-            <div style={{ fontSize: 12 }}>Analytics</div>
+            style={{ background: "#0f2a22", color: "var(--accent)", border: `2px solid ${status.output === "done" ? "var(--accent)" : "var(--border)"}`, minWidth: 100 }}>
+            <div style={{ fontSize: 19 }}>📊</div><div style={{ fontSize: 12 }}>Analytics</div>
             <div className="muted" style={{ fontSize: 10, marginTop: 3 }}>{status.output || "idle"}</div>
           </div>
         </div>
@@ -229,9 +294,14 @@ export default function Workspace() {
           <CodeEditor value={current?.code || ""} onChange={(c) => (editingOrch ? setOrch({ ...orch, code: c }) : setStageCode(selected, c))} height="300px" />
         </div>
         <div>
-          <div className="row" style={{ gap: 8, marginBottom: 8 }}><span style={{ fontSize: 16 }}>🖥️</span><strong>Output console</strong></div>
-          <div className="console" style={{ height: 300, maxHeight: 300 }}>
-            {log || <span className="muted">Press ▶ Run pipeline. Kafka → Spark (real Python) → Data quality → Snowflake (real SQL), orchestrated by Airflow.</span>}
+          <div className="row between" style={{ marginBottom: 8 }}>
+            <div className="row" style={{ gap: 8 }}><span style={{ fontSize: 16 }}>🖥️</span><strong>Run console</strong></div>
+            {running && <span className="pill blink" style={{ color: "var(--amber)", padding: "2px 8px" }}>● running</span>}
+          </div>
+          <div className="console" ref={consoleRef} style={{ height: 300, maxHeight: 300 }}>
+            {logs.length === 0
+              ? <span className="muted">Press ▶ Run pipeline. Each stage streams its logs here — colour-coded by status.</span>
+              : logs.map((e, i) => <div key={i} style={logStyle(e.type)}>{logPrefix(e.type)}{e.text}</div>)}
           </div>
         </div>
       </div>
@@ -240,7 +310,13 @@ export default function Workspace() {
         <div className="grid mt-3" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
           {warehouse && (
             <div>
-              <div className="row" style={{ gap: 8, marginBottom: 8 }}><span style={{ fontSize: 16 }}>❄️</span><strong>Warehouse table (after SQL)</strong></div>
+              <div className="row between" style={{ marginBottom: 8 }}>
+                <div className="row" style={{ gap: 8 }}><span style={{ fontSize: 16 }}>❄️</span><strong>Warehouse: {sinkTable}</strong></div>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 9px" }} onClick={() => download(`${sinkTable}.csv`, toCSV(warehouse), "text/csv")}>⬇ CSV</button>
+                  <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 9px" }} onClick={() => download(`${sinkTable}.json`, toJSON(warehouse), "application/json")}>⬇ JSON</button>
+                </div>
+              </div>
               <div className="card" style={{ padding: 0, overflowX: "auto" }}>
                 <table className="tbl">
                   <thead><tr>{warehouse.columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
@@ -252,6 +328,35 @@ export default function Workspace() {
           {chart && <BarChart table={chart} title="Spark aggregation" />}
         </div>
       )}
+
+      {/* Data lineage */}
+      <h3 className="mt-4">🧬 Data lineage</h3>
+      <div className="card">
+        <div className="diagram" style={{ marginBottom: 0, justifyContent: "flex-start" }}>
+          <div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>SOURCES</div>
+            {stages.filter((s) => s.kind === "kafka").map((s) => (
+              <div key={s.key} className="node" style={{ background: "#2a2140", color: "#b98bff", marginBottom: 6, minWidth: 120 }}>📡 {s.table || "events topic"}</div>
+            ))}
+            {Object.keys(template.dimensions || {}).map((d) => (
+              <div key={d} className="node" style={{ background: "#13263f", color: "#6c8cff", marginBottom: 6, minWidth: 120 }}>📋 {d} (dim)</div>
+            ))}
+            {!stages.some((s) => s.kind === "kafka") && <div className="node" style={{ background: "#3a2f16", color: "#f5b74e", minWidth: 120 }}>🗂️ raw file</div>}
+          </div>
+          <span className="arrow">→</span>
+          <div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>TRANSFORMS</div>
+            {stages.filter((s) => s.kind === "spark" || s.kind === "quality").map((s) => (
+              <div key={s.key} className="node" style={{ background: "#3a2f16", color: s.color, marginBottom: 6, minWidth: 120 }}>{s.icon} {s.label}</div>
+            ))}
+          </div>
+          <span className="arrow">→</span>
+          <div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>SINK</div>
+            <div className="node" style={{ background: "#123a3f", color: "#4ec9e0", minWidth: 120 }}>❄️ {sinkTable}</div>
+          </div>
+        </div>
+      </div>
 
       {/* Run history */}
       <h3 className="mt-4">🕒 Run history</h3>
