@@ -46,6 +46,10 @@ export default function Layout() {
             <NavLink to="/app/admin" className="nav-item" onClick={close}>📊 Admin dashboard</NavLink>
             <NavLink to="/app/admin/users" className="nav-item" onClick={close}>👥 Users</NavLink>
             <NavLink to="/app/admin/content" className="nav-item" onClick={close}>📝 Content manager</NavLink>
+            <NavLink to="/app/admin/projects" className="nav-item" onClick={close}>🧩 Project review</NavLink>
+            <NavLink to="/app/admin/analytics" className="nav-item" onClick={close}>📈 Analytics</NavLink>
+            <NavLink to="/app/admin/announcements" className="nav-item" onClick={close}>📣 Announcements</NavLink>
+            <NavLink to="/app/admin/settings" className="nav-item" onClick={close}>⚙️ Settings</NavLink>
           </>
         )}
       </aside>

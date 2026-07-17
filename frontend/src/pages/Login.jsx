@@ -15,8 +15,8 @@ export default function Login() {
     setError("");
     setBusy(true);
     try {
-      await login(form);
-      navigate("/app/dashboard");
+      const r = await login(form);
+      navigate(r?.user?.role === "admin" ? "/app/admin" : "/app/dashboard");
     } catch (err) {
       setError(err.message);
     } finally {

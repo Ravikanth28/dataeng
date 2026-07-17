@@ -16,6 +16,10 @@ import Profile from "./pages/Profile.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminUsers from "./pages/admin/AdminUsers.jsx";
 import AdminLessons from "./pages/admin/AdminLessons.jsx";
+import AdminAnalytics from "./pages/admin/AdminAnalytics.jsx";
+import AdminProjects from "./pages/admin/AdminProjects.jsx";
+import AdminAnnouncements from "./pages/admin/AdminAnnouncements.jsx";
+import AdminSettings from "./pages/admin/AdminSettings.jsx";
 
 function Protected({ children, admin = false }) {
   const { user, loading } = useAuth();
@@ -74,6 +78,10 @@ export default function App() {
             </Protected>
           }
         />
+        <Route path="admin/projects" element={<Protected admin><AdminProjects /></Protected>} />
+        <Route path="admin/analytics" element={<Protected admin><AdminAnalytics /></Protected>} />
+        <Route path="admin/announcements" element={<Protected admin><AdminAnnouncements /></Protected>} />
+        <Route path="admin/settings" element={<Protected admin><AdminSettings /></Protected>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

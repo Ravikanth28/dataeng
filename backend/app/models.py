@@ -84,6 +84,14 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class Setting(Base):
+    """Simple key/value platform settings (site name, feature toggles)."""
+    __tablename__ = "dfa_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+
+
 class Announcement(Base):
     __tablename__ = "dfa_announcements"
 

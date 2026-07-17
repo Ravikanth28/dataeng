@@ -175,6 +175,49 @@ export const api = {
     if (USING_BACKEND) return req("/admin/users");
     return lsGet("dfa_users", []).map(({ password, ...u }) => u);
   },
+  async adminAnalytics() {
+    if (USING_BACKEND) return req("/admin/analytics");
+    const prog = lsGet("dfa_progress", []).filter((p) => p.status === "completed");
+    const counts = {};
+    prog.forEach((p) => (counts[p.lesson_id] = (counts[p.lesson_id] || 0) + 1));
+    return {
+      total_users: lsGet("dfa_users", []).length,
+      total_completions: prog.length,
+      total_projects: lsGet("dfa_projects", []).length,
+      per_lesson: Object.entries(counts).map(([lesson_id, completions]) => ({ lesson_id, completions })).sort((a, b) => b.completions - a.completions),
+    };
+  },
+  async adminAllProjects() {
+    if (USING_BACKEND) return req("/admin/projects");
+    const cur = lsGet("dfa_current", null);
+    return lsGet("dfa_projects", []).map((p) => ({ ...p, user_name: cur?.name || "You", user_email: cur?.email || "" }));
+  },
+  async getAnnouncements() {
+    if (USING_BACKEND) return req("/admin/announcements", { auth: false });
+    return lsGet("dfa_announcements", []);
+  },
+  async createAnnouncement(data) {
+    if (USING_BACKEND) return req("/admin/announcements", { method: "POST", body: data });
+    const all = lsGet("dfa_announcements", []);
+    const a = { id: Date.now(), ...data, created_at: new Date().toISOString() };
+    all.unshift(a);
+    lsSet("dfa_announcements", all);
+    return a;
+  },
+  async deleteAnnouncement(id) {
+    if (USING_BACKEND) return req(`/admin/announcements/${id}`, { method: "DELETE" });
+    lsSet("dfa_announcements", lsGet("dfa_announcements", []).filter((a) => a.id !== id));
+    return { ok: true };
+  },
+  async getSettings() {
+    if (USING_BACKEND) return req("/admin/settings");
+    return lsGet("dfa_settings", { site_name: "DataFlow Academy", allow_signups: "true" });
+  },
+  async saveSettings(data) {
+    if (USING_BACKEND) return req("/admin/settings", { method: "PUT", body: data });
+    lsSet("dfa_settings", data);
+    return { ok: true };
+  },
 
   /* ----- CMS lessons ----- */
   async getCustomLessons() {

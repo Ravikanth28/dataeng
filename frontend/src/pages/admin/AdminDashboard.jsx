@@ -30,12 +30,22 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div className="card mt-3 row between wrap">
-        <div>
-          <h3 style={{ margin: 0 }}>Manage users</h3>
-          <span className="muted">View, activate, or promote users.</span>
-        </div>
-        <Link to="/app/admin/users" className="btn btn-primary">Open users →</Link>
+      <h2 className="mt-4">Manage</h2>
+      <div className="grid grid-3 mt-2">
+        {[
+          { to: "/app/admin/users", icon: "👥", label: "Users", desc: "View, activate, promote" },
+          { to: "/app/admin/content", icon: "📝", label: "Content manager", desc: "Create & edit lessons" },
+          { to: "/app/admin/projects", icon: "🧩", label: "Project review", desc: "Browse student projects" },
+          { to: "/app/admin/analytics", icon: "📈", label: "Analytics", desc: "Completions & engagement" },
+          { to: "/app/admin/announcements", icon: "📣", label: "Announcements", desc: "Post notices" },
+          { to: "/app/admin/settings", icon: "⚙️", label: "Settings", desc: "Site config & toggles" },
+        ].map((c) => (
+          <Link key={c.to} to={c.to} className="card card-hover">
+            <div style={{ fontSize: 26 }}>{c.icon}</div>
+            <h3 style={{ margin: "6px 0 2px" }}>{c.label}</h3>
+            <span className="muted" style={{ fontSize: 13 }}>{c.desc}</span>
+          </Link>
+        ))}
       </div>
     </div>
   );

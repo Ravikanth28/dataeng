@@ -1,12 +1,16 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useProgress } from "../lib/useProgress.js";
 import { useCourse } from "../context/CourseContext.jsx";
+import { api } from "../lib/api.js";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { completed } = useProgress();
   const { tracks: TRACKS, totalLessons: TOTAL_LESSONS, allLessons: ALL_LESSONS } = useCourse();
+  const [announcements, setAnnouncements] = useState([]);
+  useEffect(() => { api.getAnnouncements().then((a) => setAnnouncements(a.slice(0, 2))).catch(() => {}); }, []);
 
   const done = completed.size;
   const pct = TOTAL_LESSONS ? Math.round((done / TOTAL_LESSONS) * 100) : 0;
@@ -16,6 +20,13 @@ export default function Dashboard() {
     <div className="content">
       <h1>Hey {user?.name?.split(" ")[0] || "there"} 👋</h1>
       <p>Welcome back. Here's your learning progress.</p>
+
+      {announcements.map((a) => (
+        <div key={a.id} className="callout tip" style={{ marginBottom: 12 }}>
+          <strong>📣 {a.title}</strong>
+          {a.body && <div style={{ marginTop: 4 }}>{a.body}</div>}
+        </div>
+      ))}
 
       <div className="grid grid-3 mt-2">
         <div className="card">
