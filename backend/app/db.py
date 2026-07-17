@@ -10,14 +10,20 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import settings
 
+# Normalize plain "mysql://" URLs (e.g. the one TiDB Cloud shows) to the pymysql
+# driver, since mysqlclient/MySQLdb is not installed.
+DATABASE_URL = settings.DATABASE_URL
+if DATABASE_URL.startswith("mysql://"):
+    DATABASE_URL = "mysql+pymysql://" + DATABASE_URL[len("mysql://"):]
+
 connect_args: dict = {}
 
 # TiDB Cloud / most managed MySQL require SSL. Enable it for pymysql.
-if settings.DATABASE_URL.startswith("mysql+pymysql"):
+if DATABASE_URL.startswith("mysql+pymysql"):
     connect_args["ssl"] = {"ca": certifi.where()}
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    DATABASE_URL,
     connect_args=connect_args,
     pool_pre_ping=True,   # reconnect if a pooled connection went stale
     pool_recycle=280,     # TiDB closes idle connections; recycle before that
