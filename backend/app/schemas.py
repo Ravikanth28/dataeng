@@ -16,6 +16,11 @@ class LoginIn(BaseModel):
     password: str
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class UserOut(BaseModel):
     id: int
     name: str
@@ -88,6 +93,30 @@ class LessonOut(BaseModel):
     body: str
     practice_json: str
     order: int
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Pipeline runs ----------
+class RunIn(BaseModel):
+    project_id: int | None = None
+    title: str = ""
+    template_id: str = ""
+    status: str = "success"
+    duration_ms: int = 0
+    log: str = ""
+
+
+class RunOut(BaseModel):
+    id: int
+    project_id: int | None
+    title: str
+    template_id: str
+    status: str
+    duration_ms: int
+    log: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

@@ -50,6 +50,29 @@ async function getSql(onStatus = () => {}) {
   return sqlPromise;
 }
 
+// Loads a table from data ({columns, rows}) and runs SQL against it — used by
+// the Project Builder's Snowflake stage to run REAL SQL on the Spark output.
+export async function runSqlOnData(tableName, data, query, onStatus) {
+  const SQL = await getSql(onStatus);
+  const db = new SQL.Database();
+  try {
+    const cols = data.columns.map((c) => `"${c}"`).join(", ");
+    db.run(`CREATE TABLE ${tableName} (${cols});`);
+    const placeholders = data.columns.map(() => "?").join(", ");
+    const stmt = db.prepare(`INSERT INTO ${tableName} VALUES (${placeholders})`);
+    for (const row of data.rows) stmt.run(row);
+    stmt.free();
+    const results = db.exec(query);
+    if (!results.length) return { ok: true, columns: [], rows: [], note: "Statement ran (no rows)." };
+    const last = results[results.length - 1];
+    return { ok: true, columns: last.columns, rows: last.values };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  } finally {
+    db.close();
+  }
+}
+
 // Runs the student's SQL against a freshly seeded DB. Returns the result of the
 // LAST SELECT statement as { columns, rows }.
 export async function runSql(query, onStatus) {

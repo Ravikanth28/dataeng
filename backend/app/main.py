@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import Base, engine
-from .routers import admin, auth, lessons, progress, projects
+from .routers import admin, auth, lessons, progress, projects, runs
 
 # Create tables in TiDB on startup (safe: only creates what's missing).
 Base.metadata.create_all(bind=engine)
@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(progress.router)
 app.include_router(projects.router)
+app.include_router(runs.router)
 app.include_router(lessons.router)
 app.include_router(admin.router)
 

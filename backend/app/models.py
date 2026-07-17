@@ -69,6 +69,21 @@ class Lesson(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class Run(Base):
+    """A recorded execution of a pipeline in the Project Builder."""
+    __tablename__ = "dfa_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    template_id: Mapped[str] = mapped_column(String(50), default="")
+    status: Mapped[str] = mapped_column(String(20), default="success")  # success|failed
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    log: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Announcement(Base):
     __tablename__ = "dfa_announcements"
 

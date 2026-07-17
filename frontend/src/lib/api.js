@@ -94,6 +94,32 @@ export const api = {
     localStorage.removeItem("dfa_current");
   },
 
+  async changePassword(current_password, new_password) {
+    if (USING_BACKEND)
+      return req("/auth/change-password", { method: "POST", body: { current_password, new_password } });
+    // localStorage demo: update the stored user's password
+    const cur = lsGet("dfa_current", null);
+    const users = lsGet("dfa_users", []);
+    const u = users.find((x) => x.id === cur?.id);
+    if (!u || u.password !== current_password) throw new Error("Current password is incorrect");
+    u.password = new_password;
+    lsSet("dfa_users", users);
+    return { ok: true };
+  },
+
+  async getRuns(projectId) {
+    if (USING_BACKEND) return req(`/runs${projectId ? `?project_id=${projectId}` : ""}`);
+    return lsGet("dfa_runs", []).filter((r) => !projectId || r.project_id === projectId).slice(0, 20);
+  },
+  async createRun(data) {
+    if (USING_BACKEND) return req("/runs", { method: "POST", body: data });
+    const all = lsGet("dfa_runs", []);
+    const r = { id: Date.now(), ...data, created_at: new Date().toISOString() };
+    all.unshift(r);
+    lsSet("dfa_runs", all.slice(0, 20));
+    return r;
+  },
+
   /* ----- progress ----- */
   async getProgress() {
     if (USING_BACKEND) return req("/progress");
