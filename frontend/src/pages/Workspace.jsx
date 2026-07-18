@@ -39,6 +39,23 @@ function toCSV(t) {
 function toJSON(t) {
   return JSON.stringify(t.rows.map((r) => Object.fromEntries(t.columns.map((c, i) => [c, r[i]]))), null, 2);
 }
+// Build the REAL load SQL (CREATE + INSERT) from the Spark output — this is how
+// the data actually lands in the warehouse.
+function buildLoadSQL(tableName, data, loadMode) {
+  if (!data || !data.rows.length) return "";
+  const val = (c) => (typeof c === "number" ? String(c) : `'${String(c).replace(/'/g, "''")}'`);
+  const rows = data.rows.map((r) => "  (" + r.map(val).join(", ") + ")").join(",\n");
+  const pre = loadMode === "overwrite" ? `TRUNCATE TABLE ${tableName};\n` : "";
+  return `-- ${loadMode.toUpperCase()} load generated from the Spark output\nCREATE TABLE IF NOT EXISTS ${tableName} (\n  ${data.columns.join(",\n  ")}\n);\n${pre}INSERT INTO ${tableName} (${data.columns.join(", ")}) VALUES\n${rows};`;
+}
+function sqlHighlight(sql) {
+  return sql
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/(--[^\n]*)/g, '<span style="color:#6b7688">$1</span>')
+    .replace(/\b(CREATE TABLE IF NOT EXISTS|CREATE TABLE|INSERT INTO|TRUNCATE TABLE|VALUES|SELECT|FROM|WHERE|GROUP BY|ORDER BY|RANK|OVER|PARTITION BY|CASE|WHEN|THEN|ELSE|END|AS|SUM|COUNT|ROUND|DESC|ASC)\b/g, '<span style="color:#6c8cff">$1</span>')
+    .replace(/('[^']*')/g, '<span style="color:#7fd18c">$1</span>')
+    .replace(/\b(\d+)\b/g, '<span style="color:#f5b74e">$1</span>');
+}
 function download(filename, text, mime) {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -64,6 +81,7 @@ export default function Workspace() {
   const [saved, setSaved] = useState("");
   const [chart, setChart] = useState(null);
   const [warehouse, setWarehouse] = useState(null);
+  const [loadSql, setLoadSql] = useState(null);
   const [runs, setRuns] = useState([]);
   const loadedId = useRef(null);
   const consoleRef = useRef(null);
@@ -124,7 +142,7 @@ export default function Workspace() {
     }));
 
   const runPipeline = async () => {
-    setRunning(true); setLogs([]); setStatus({}); setMetrics({}); setChart(null); setWarehouse(null);
+    setRunning(true); setLogs([]); setStatus({}); setMetrics({}); setChart(null); setWarehouse(null); setLoadSql(null);
     const t0 = Date.now();
     // Retry limit comes from the Airflow DAG's default_args (real Airflow style).
     const dagRetries = parseInt(orch.code.match(/retries["']?\s*[:=]\s*(\d+)/)?.[1] ?? "0", 10);
@@ -182,14 +200,23 @@ export default function Workspace() {
         push("ok", "all quality checks passed");
         setMetric(stage.key, "✓ passed");
       } else if (stage.kind === "snowflake") {
-        push("info", `loading into warehouse (mode: ${config.loadMode}) + running SQL…`);
+        push("info", `loading into warehouse (mode: ${config.loadMode})…`);
         if (!sparkResult) push("warn", "no Spark result to load");
         else {
+          // Show the REAL load happening: generated INSERT statements
+          const loadSQL = buildLoadSQL(stage.table || "results", sparkResult, config.loadMode);
+          setLoadSql(loadSQL);
+          push("out", `-- data landing in '${stage.table || "results"}':`);
+          loadSQL.split("\n").slice(0, 9).forEach((l) => push("out", l));
+          if (sparkResult.rows.length > 5) push("info", `…and ${sparkResult.rows.length - 5} more rows`);
+          push("ok", `${sparkResult.rows.length} rows stored in the warehouse`);
+          // Now run the transform SQL on the loaded data
+          push("info", "running transform SQL…");
           const res = await runSqlOnData("results", sparkResult, stage.code, (m) => push("info", m));
           if (!res.ok) { failed = true; failStage = stage.key; push("err", "SQL error: " + res.error); break; }
           setWarehouse({ columns: res.columns, rows: res.rows });
-          push("ok", `loaded ${sparkResult.rows.length} rows into '${stage.table}' → SQL returned ${res.rows.length} rows`);
-          setMetric(stage.key, `${res.rows.length} rows`);
+          push("ok", `transform SQL returned ${res.rows.length} rows`);
+          setMetric(stage.key, `${sparkResult.rows.length} loaded`);
         }
       }
       setSt(stage.key, "done");
@@ -341,6 +368,18 @@ export default function Workspace() {
           </div>
         </div>
       </div>
+
+      {loadSql && (
+        <div className="mt-3">
+          <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>❄️</span>
+            <strong>How the data was stored</strong>
+            <span className="muted" style={{ fontSize: 12 }}>· auto-generated load SQL from the Spark output</span>
+          </div>
+          <div className="codeblock" style={{ maxHeight: 260, overflow: "auto", margin: 0 }}
+            dangerouslySetInnerHTML={{ __html: sqlHighlight(loadSql) }} />
+        </div>
+      )}
 
       {(chart || warehouse) && (
         <div className="grid mt-3" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
