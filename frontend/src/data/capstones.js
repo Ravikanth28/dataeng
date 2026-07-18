@@ -19,7 +19,15 @@ export const CAPSTONES = [
       "Stream orders with Kafka, JOIN them with a customer dimension in Spark, validate the data, and transform it with SQL in Snowflake.",
     orchestrator: {
       label: "Airflow DAG", icon: "🗓️",
-      code: `tasks = ["produce_orders", "spark_join", "quality_check", "load_snowflake"]
+      code: `from datetime import timedelta
+
+# Airflow retry policy — applied to every task in the DAG
+default_args = {
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+}
+
+tasks = ["produce_orders", "spark_join", "quality_check", "load_snowflake"]
 edges = [
     ["produce_orders", "spark_join"],
     ["spark_join", "quality_check"],
@@ -92,7 +100,15 @@ ORDER BY revenue_rank;`,
       "Capture page clicks, count views per page in Spark, validate, then build a funnel with SQL in Snowflake.",
     orchestrator: {
       label: "Airflow DAG", icon: "🗓️",
-      code: `tasks = ["collect_clicks", "sessionize", "quality_check", "load_page_views"]
+      code: `from datetime import timedelta
+
+# Airflow retry policy — applied to every task in the DAG
+default_args = {
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+}
+
+tasks = ["collect_clicks", "sessionize", "quality_check", "load_page_views"]
 edges = [
     ["collect_clicks", "sessionize"],
     ["sessionize", "quality_check"],
@@ -154,7 +170,15 @@ ORDER BY views DESC;`,
       "Stream device readings, average per device in Spark, validate ranges, and flag anomalies with SQL in Snowflake.",
     orchestrator: {
       label: "Airflow DAG", icon: "🗓️",
-      code: `tasks = ["ingest_readings", "aggregate", "quality_check", "load_alerts"]
+      code: `from datetime import timedelta
+
+# Airflow retry policy — applied to every task in the DAG
+default_args = {
+    "retries": 3,
+    "retry_delay": timedelta(minutes=2),
+}
+
+tasks = ["ingest_readings", "aggregate", "quality_check", "load_alerts"]
 edges = [
     ["ingest_readings", "aggregate"],
     ["aggregate", "quality_check"],
@@ -215,7 +239,15 @@ ORDER BY avg_temp DESC;`,
       "A classic batch pipeline: Spark cleans a raw file, a quality gate checks it, and SQL builds a star-schema table in Snowflake.",
     orchestrator: {
       label: "Airflow DAG", icon: "🗓️",
-      code: `tasks = ["wait_for_file", "spark_transform", "quality_check", "load_warehouse"]
+      code: `from datetime import timedelta
+
+# Airflow retry policy — applied to every task in the DAG
+default_args = {
+    "retries": 1,
+    "retry_delay": timedelta(minutes=10),
+}
+
+tasks = ["wait_for_file", "spark_transform", "quality_check", "load_warehouse"]
 edges = [
     ["wait_for_file", "spark_transform"],
     ["spark_transform", "quality_check"],

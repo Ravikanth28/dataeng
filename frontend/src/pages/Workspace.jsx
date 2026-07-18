@@ -45,7 +45,7 @@ export default function Workspace() {
   const [title, setTitle] = useState(template.title);
   const [stages, setStages] = useState(() => template.stages.map((s) => ({ ...s })));
   const [orch, setOrch] = useState(() => ({ ...template.orchestrator }));
-  const [config, setConfig] = useState({ retries: 2, loadMode: "append", injectFail: "" });
+  const [config, setConfig] = useState({ loadMode: "append", injectFail: "" });
   const [selected, setSelected] = useState(template.stages[0].key);
   const [status, setStatus] = useState({});
   const [metrics, setMetrics] = useState({});
@@ -63,7 +63,7 @@ export default function Workspace() {
     setTitle(template.title);
     setStages(template.stages.map((s) => ({ ...s })));
     setOrch({ ...template.orchestrator });
-    setConfig({ retries: 2, loadMode: "append", injectFail: "" });
+    setConfig({ loadMode: "append", injectFail: "" });
     setSelected(template.stages[0].key);
     setStatus({}); setMetrics({}); setLogs([]); setChart(null); setWarehouse(null);
   }, [template, projectId]);
@@ -100,6 +100,8 @@ export default function Workspace() {
   const runPipeline = async () => {
     setRunning(true); setLogs([]); setStatus({}); setMetrics({}); setChart(null); setWarehouse(null);
     const t0 = Date.now();
+    // Retry limit comes from the Airflow DAG's default_args (real Airflow style).
+    const dagRetries = parseInt(orch.code.match(/retries["']?\s*[:=]\s*(\d+)/)?.[1] ?? "0", 10);
     const entries = [];
     const push = (type, text) => { entries.push({ type, text }); setLogs([...entries]); };
 
@@ -113,15 +115,15 @@ export default function Workspace() {
 
       // Retry & failure simulation (Airflow-style)
       if (stage.key === config.injectFail) {
-        if (config.retries >= 1) {
+        if (dagRetries >= 1) {
           push("warn", `attempt 1 failed — injected failure 💥`);
-          for (let a = 1; a <= config.retries; a++) {
-            push("info", `↻ Airflow retrying (${a}/${config.retries})…`);
+          for (let a = 1; a <= dagRetries; a++) {
+            push("info", `↻ Airflow retrying (${a}/${dagRetries}) — retry limit from DAG default_args…`);
             await sleep(450);
           }
           push("ok", `recovered on retry — task is idempotent, so re-running was safe`);
         } else {
-          push("err", `failed and retries = 0 → pipeline stopped`);
+          push("err", `failed and retries = 0 in the DAG → pipeline stopped`);
           failed = true; failStage = stage.key; break;
         }
       }
@@ -205,6 +207,7 @@ export default function Workspace() {
   const editingOrch = selected === "orchestrator";
   const current = editingOrch ? orch : stages.find((s) => s.key === selected);
   const schedule = orch.code.match(/schedule\s*=\s*"([^"]+)"/)?.[1] || "@daily";
+  const retries = parseInt(orch.code.match(/retries["']?\s*[:=]\s*(\d+)/)?.[1] ?? "0", 10);
 
   const logStyle = (type) => ({
     head: { color: "#e7ebf2", fontWeight: 600, marginTop: 8, borderTop: "1px solid rgba(255,255,255,.06)", paddingTop: 6 },
@@ -240,18 +243,17 @@ export default function Workspace() {
             <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: "50%", background: dot(status.orchestrator), display: "inline-block" }} />
           </button>
           {/* Pipeline config */}
-          <div className="row wrap" style={{ gap: 10, fontSize: 12 }}>
-            <label className="muted">⚙️ Retries
-              <input type="number" min="0" max="5" value={config.retries} onChange={(e) => setConfig({ ...config, retries: +e.target.value })}
-                style={{ width: 46, marginLeft: 6 }} className="input" />
-            </label>
-            <label className="muted">Load mode
-              <select value={config.loadMode} onChange={(e) => setConfig({ ...config, loadMode: e.target.value })} className="input" style={{ marginLeft: 6, width: 110 }}>
+          <div className="row wrap" style={{ gap: 12, fontSize: 12, alignItems: "center" }}>
+            <button className="pill" onClick={() => setSelected("orchestrator")} title="Set in the Airflow DAG default_args" style={{ cursor: "pointer" }}>
+              🔁 retries: <strong style={{ color: "var(--text)" }}>{retries}</strong> <span className="muted">· set in DAG</span>
+            </button>
+            <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>Load mode
+              <select value={config.loadMode} onChange={(e) => setConfig({ ...config, loadMode: e.target.value })} className="input" style={{ width: 116 }}>
                 <option value="append">append</option><option value="overwrite">overwrite</option><option value="merge">merge</option>
               </select>
             </label>
-            <label className="muted">💥 Inject failure
-              <select value={config.injectFail} onChange={(e) => setConfig({ ...config, injectFail: e.target.value })} className="input" style={{ marginLeft: 6, width: 120 }}>
+            <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>💥 Inject failure
+              <select value={config.injectFail} onChange={(e) => setConfig({ ...config, injectFail: e.target.value })} className="input" style={{ width: 130 }}>
                 <option value="">none</option>
                 {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
