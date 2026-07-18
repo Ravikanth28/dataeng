@@ -5,7 +5,7 @@ import BarChart from "../components/BarChart.jsx";
 import { runPython } from "../lib/pyodide.js";
 import { runSqlOnData } from "../lib/sqljs.js";
 import { api } from "../lib/api.js";
-import { CAPSTONES, getCapstone } from "../data/capstones.js";
+import { CAPSTONES, getCapstone, STAGE_LIBRARY } from "../data/capstones.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -85,6 +85,31 @@ export default function Workspace() {
   const [runs, setRuns] = useState([]);
   const loadedId = useRef(null);
   const consoleRef = useRef(null);
+  const idCounter = useRef(1);
+  const dragIndex = useRef(null);
+
+  const addStage = (kind) => {
+    const def = STAGE_LIBRARY[kind];
+    if (!def) return;
+    const key = `${kind}-${idCounter.current++}`;
+    setStages((s) => [...s, { ...def, key }]);
+    setSelected(key);
+  };
+  const removeStage = (key) => {
+    setStages((s) => {
+      const next = s.filter((x) => x.key !== key);
+      if (selected === key) setSelected(next[0]?.key || "orchestrator");
+      return next;
+    });
+  };
+  const moveStage = (from, to) => {
+    setStages((s) => {
+      const next = [...s];
+      const [m] = next.splice(from, 1);
+      next.splice(to, 0, m);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (projectId) return;
@@ -322,20 +347,46 @@ export default function Workspace() {
           </div>
         </div>
 
-        <div className="diagram mt-2" style={{ marginBottom: 0, borderStyle: "solid" }}>
-          {stages.map((b) => (
-            <div key={b.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => setSelected(b.key)} className={`node ${status[b.key] === "run" ? "stage-active" : ""}`}
-                style={{ background: selected === b.key ? "var(--surface-2)" : "var(--bg-2)", color: b.color,
-                  border: `2px solid ${selected === b.key ? b.color : status[b.key] === "done" ? "var(--accent)" : status[b.key] === "err" ? "var(--danger)" : "var(--border)"}`,
-                  cursor: "pointer", minWidth: 112 }}>
-                <div style={{ fontSize: 19 }} className={status[b.key] === "run" ? "spin" : ""}>{b.icon}</div>
-                <div style={{ fontSize: 12 }}>{b.label}</div>
-                <div style={{ marginTop: 3 }}>
-                  <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: dot(status[b.key]) }} />
-                  <span className="muted" style={{ fontSize: 10, marginLeft: 4 }}>{metrics[b.key] || status[b.key] || "idle"}</span>
-                </div>
-              </button>
+        {/* Stage palette — click (or drag onto canvas) to add a stage */}
+        <div className="row wrap mt-2" style={{ gap: 6, alignItems: "center" }}>
+          <span className="muted" style={{ fontSize: 12 }}>➕ Add stage:</span>
+          {Object.values(STAGE_LIBRARY).map((s) => (
+            <button key={s.kind} onClick={() => addStage(s.kind)} disabled={running}
+              draggable={!running} onDragStart={() => (dragIndex.current = `add:${s.kind}`)}
+              className="pill" style={{ cursor: "pointer", color: s.color, borderColor: "var(--border-strong)" }}>
+              + {s.icon} {s.label}
+            </button>
+          ))}
+          <span className="muted" style={{ fontSize: 11 }}>· drag blocks to reorder · × to remove</span>
+        </div>
+
+        <div className="diagram mt-2" style={{ marginBottom: 0, borderStyle: "solid" }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => { if (typeof dragIndex.current === "string" && dragIndex.current.startsWith("add:")) { addStage(dragIndex.current.slice(4)); dragIndex.current = null; } }}>
+          {stages.map((b, i) => (
+            <div key={b.key}
+              draggable={!running}
+              onDragStart={() => (dragIndex.current = i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.stopPropagation(); if (typeof dragIndex.current === "number" && dragIndex.current !== i) moveStage(dragIndex.current, i); dragIndex.current = null; }}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ position: "relative" }}>
+                <button onClick={() => setSelected(b.key)} className={`node ${status[b.key] === "run" ? "stage-active" : ""}`}
+                  style={{ background: selected === b.key ? "var(--surface-2)" : "var(--bg-2)", color: b.color,
+                    border: `2px solid ${selected === b.key ? b.color : status[b.key] === "done" ? "var(--accent)" : status[b.key] === "err" ? "var(--danger)" : "var(--border)"}`,
+                    cursor: "grab", minWidth: 112 }}>
+                  <div style={{ fontSize: 19 }} className={status[b.key] === "run" ? "spin" : ""}>{b.icon}</div>
+                  <div style={{ fontSize: 12 }}>{b.label}</div>
+                  <div style={{ marginTop: 3 }}>
+                    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: dot(status[b.key]) }} />
+                    <span className="muted" style={{ fontSize: 10, marginLeft: 4 }}>{metrics[b.key] || status[b.key] || "idle"}</span>
+                  </div>
+                </button>
+                {!running && (
+                  <span onClick={(e) => { e.stopPropagation(); removeStage(b.key); }} title="Remove stage"
+                    style={{ position: "absolute", top: -7, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--danger)", color: "#fff", fontSize: 12, display: "grid", placeItems: "center", cursor: "pointer", lineHeight: 1 }}>×</span>
+                )}
+              </div>
               <div className={`connector ${running ? "live" : ""}`} />
             </div>
           ))}

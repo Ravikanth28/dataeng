@@ -298,3 +298,39 @@ ORDER BY revenue DESC;`,
 export function getCapstone(id) {
   return CAPSTONES.find((c) => c.id === id) || CAPSTONES[0];
 }
+
+// Palette of stage types a user can drag/add into their own pipeline.
+export const STAGE_LIBRARY = {
+  kafka: {
+    kind: "kafka", label: "Kafka producer", icon: "📡", color: C.kafka,
+    code: `# Events streamed into the topic
+messages = [
+    {"key": "u1", "product": "Laptop", "amount": 1200},
+    {"key": "u2", "product": "Phone",  "amount": 800},
+    {"key": "u1", "product": "Tablet", "amount": 300},
+]
+partitions = 3`,
+  },
+  spark: {
+    kind: "spark", label: "Spark job", icon: "⚡", color: C.spark,
+    code: `import pandas as pd
+df = pd.DataFrame(orders)
+
+result = (df.groupby("product")["amount"]
+            .sum().reset_index(name="revenue")
+            .sort_values("revenue", ascending=False))
+
+print(result.to_string(index=False))`,
+  },
+  quality: {
+    kind: "quality", label: "Data quality", icon: "🧪", color: C.quality,
+    code: `# Assertions against 'result'. A failure stops the pipeline.
+assert len(result) > 0, "result is empty!"
+print(f"✓ {len(result)} rows passed checks")`,
+  },
+  snowflake: {
+    kind: "snowflake", label: "Snowflake SQL", icon: "❄️", color: C.snowflake, table: "warehouse",
+    code: `-- The Spark result is loaded into the 'results' table.
+SELECT * FROM results ORDER BY 1;`,
+  },
+};
