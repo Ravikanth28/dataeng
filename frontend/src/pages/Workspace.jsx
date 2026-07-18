@@ -329,35 +329,6 @@ export default function Workspace() {
         </div>
       )}
 
-      {/* Data lineage */}
-      <h3 className="mt-4">🧬 Data lineage</h3>
-      <div className="card">
-        <div className="diagram" style={{ marginBottom: 0, justifyContent: "flex-start" }}>
-          <div>
-            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>SOURCES</div>
-            {stages.filter((s) => s.kind === "kafka").map((s) => (
-              <div key={s.key} className="node" style={{ background: "#2a2140", color: "#b98bff", marginBottom: 6, minWidth: 120 }}>📡 {s.table || "events topic"}</div>
-            ))}
-            {Object.keys(template.dimensions || {}).map((d) => (
-              <div key={d} className="node" style={{ background: "#13263f", color: "#6c8cff", marginBottom: 6, minWidth: 120 }}>📋 {d} (dim)</div>
-            ))}
-            {!stages.some((s) => s.kind === "kafka") && <div className="node" style={{ background: "#3a2f16", color: "#f5b74e", minWidth: 120 }}>🗂️ raw file</div>}
-          </div>
-          <span className="arrow">→</span>
-          <div>
-            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>TRANSFORMS</div>
-            {stages.filter((s) => s.kind === "spark" || s.kind === "quality").map((s) => (
-              <div key={s.key} className="node" style={{ background: "#3a2f16", color: s.color, marginBottom: 6, minWidth: 120 }}>{s.icon} {s.label}</div>
-            ))}
-          </div>
-          <span className="arrow">→</span>
-          <div>
-            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>SINK</div>
-            <div className="node" style={{ background: "#123a3f", color: "#4ec9e0", minWidth: 120 }}>❄️ {sinkTable}</div>
-          </div>
-        </div>
-      </div>
-
       {/* Run history */}
       <h3 className="mt-4">🕒 Run history</h3>
       {runs.length === 0 ? (
