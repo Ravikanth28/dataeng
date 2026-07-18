@@ -413,6 +413,41 @@ export const TRACKS = [
 <div class="callout tip"><strong>Recap:</strong> The working style is engineering discipline applied to data — version control, containers, tests, CI/CD, and monitoring. The tools change; these habits don't.</div>
 `,
       },
+      {
+        id: "de-glossary",
+        title: "Glossary & interview prep",
+        level: "easy",
+        minutes: 8,
+        body: `
+<h2>The terms you must know</h2>
+<table class="tbl">
+  <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ETL / ELT</strong></td><td>Extract-Transform-Load vs Extract-Load-Transform (transform in the warehouse)</td></tr>
+    <tr><td><strong>Idempotent</strong></td><td>Running a task twice gives the same result (safe to retry)</td></tr>
+    <tr><td><strong>Backfill</strong></td><td>Re-running a pipeline for past dates</td></tr>
+    <tr><td><strong>Partition</strong></td><td>A slice of data processed/stored independently (parallelism)</td></tr>
+    <tr><td><strong>Shuffle</strong></td><td>Moving data between machines (expensive) — from joins/groupBy</td></tr>
+    <tr><td><strong>Schema</strong></td><td>The columns + types of a dataset</td></tr>
+    <tr><td><strong>Fact / Dimension</strong></td><td>Measurements you sum / the context you group by (star schema)</td></tr>
+    <tr><td><strong>Offset / Lag</strong></td><td>A consumer's position / how far behind it is (Kafka)</td></tr>
+    <tr><td><strong>DAG</strong></td><td>Directed Acyclic Graph — a pipeline of tasks with dependencies</td></tr>
+    <tr><td><strong>Warehouse / Lake / Lakehouse</strong></td><td>Structured store / raw store / both</td></tr>
+  </tbody>
+</table>
+<h3>Classic interview questions</h3>
+<ul>
+  <li>"Batch vs streaming — when would you use each?"</li>
+  <li>"What is a shuffle and why is it expensive?"</li>
+  <li>"How do you make a pipeline idempotent?"</li>
+  <li>"ETL vs ELT — why did ELT become popular?"</li>
+  <li>"How does Kafka guarantee ordering?" <em>(within a partition)</em></li>
+  <li>"Star schema — what's a fact vs a dimension?"</li>
+  <li>"How would you handle a pipeline that failed at 3am?" <em>(retries, alerts, backfill, idempotency)</em></li>
+</ul>
+<div class="callout tip"><strong>Recap:</strong> Master these terms and questions — they cover ~80% of what comes up in data-engineering interviews and daily conversations.</div>
+`,
+      },
     ],
   },
 
@@ -819,6 +854,45 @@ airflow dags backfill -s 2024-01-01 -e 2024-01-07 my_pipeline</div>
 <div class="callout"><strong>Recap:</strong> <code>airflow standalone</code> or Docker to run it; <code>dags test</code>/<code>tasks test</code> to debug locally; the Grid view + Logs to monitor and fix in production.</div>
 `,
       },
+      {
+        id: "airflow-cheatsheet",
+        title: "Airflow cheat sheet",
+        level: "easy",
+        minutes: 6,
+        body: `
+<h2>Airflow quick reference</h2>
+<h3>Minimal DAG</h3>
+<div class="codeblock">from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
+
+default_args = {"retries": 2, "retry_delay": timedelta(minutes=5)}
+
+with DAG("dag_id", start_date=datetime(2024,1,1),
+         schedule="@daily", catchup=False, default_args=default_args) as dag:
+    t1 = PythonOperator(task_id="a", python_callable=fn)
+    t2 = PythonOperator(task_id="b", python_callable=fn)
+    t1 >> t2</div>
+<h3>Dependencies</h3>
+<div class="codeblock">a >> b >> c        # chain
+a >> [b, c]        # fan-out
+[a, b] >> c        # fan-in</div>
+<h3>Schedules</h3>
+<table class="tbl"><thead><tr><th>Value</th><th>Runs</th></tr></thead><tbody>
+<tr><td><code>@hourly</code> / <code>@daily</code> / <code>@weekly</code></td><td>presets</td></tr>
+<tr><td><code>"0 6 * * *"</code></td><td>daily 06:00</td></tr>
+<tr><td><code>"*/15 * * * *"</code></td><td>every 15 min</td></tr>
+<tr><td><code>None</code></td><td>manual only</td></tr>
+</tbody></table>
+<h3>CLI</h3>
+<div class="codeblock">airflow dags list
+airflow dags test my_dag 2024-01-01     # run locally
+airflow tasks test my_dag task 2024-01-01
+airflow dags trigger my_dag
+airflow dags backfill -s 2024-01-01 -e 2024-01-07 my_dag</div>
+<div class="callout warn"><strong>Gotchas:</strong> set <code>catchup=False</code>; keep DAG files light; make tasks idempotent; secrets go in Connections, not code.</div>
+`,
+      },
     ],
   },
 
@@ -1206,6 +1280,39 @@ spark = (SparkSession.builder
 <div class="callout"><strong>Recap:</strong> <code>SparkSession</code> with <code>local[*]</code> to learn; <code>spark-submit</code> with executor settings for prod; the port-4040 UI to watch and tune jobs.</div>
 `,
       },
+      {
+        id: "spark-cheatsheet",
+        title: "PySpark cheat sheet",
+        level: "easy",
+        minutes: 6,
+        body: `
+<h2>PySpark quick reference</h2>
+<h3>Read / write</h3>
+<div class="codeblock">df = spark.read.parquet("path")          # .csv(...,header=True) / .json(...)
+df.write.mode("overwrite").parquet("out")
+df.write.partitionBy("date").parquet("out")</div>
+<h3>Transform</h3>
+<div class="codeblock">from pyspark.sql import functions as F
+df.select("a","b")
+df.filter(F.col("amount") > 100)
+df.withColumn("tax", F.col("amount")*0.1)
+df.groupBy("product").agg(F.sum("amount").alias("rev"))
+df.orderBy(F.desc("rev"))
+df.dropDuplicates(["id"])
+df.na.fill(0)
+a.join(b, on="id", how="inner")</div>
+<h3>Window functions</h3>
+<div class="codeblock">from pyspark.sql.window import Window
+w = Window.partitionBy("country").orderBy(F.desc("amount"))
+df.withColumn("rank", F.row_number().over(w))</div>
+<h3>Actions (trigger execution)</h3>
+<div class="codeblock">df.show()   df.count()   df.collect()   df.write...</div>
+<h3>SQL</h3>
+<div class="codeblock">df.createOrReplaceTempView("t")
+spark.sql("SELECT product, SUM(amount) FROM t GROUP BY product")</div>
+<div class="callout warn"><strong>Perf:</strong> filter early · <code>broadcast(small_df)</code> in joins · <code>df.cache()</code> if reused · watch shuffles.</div>
+`,
+      },
     ],
   },
 
@@ -1550,6 +1657,37 @@ kafka-console-consumer.sh --topic orders --from-beginning \\
 <div class="callout"><strong>Recap:</strong> Docker to run a broker; <code>kafka-topics</code>, <code>kafka-console-producer/consumer</code>, and <code>kafka-consumer-groups</code> to operate it; watch <strong>lag</strong> to know if consumers are keeping up.</div>
 `,
       },
+      {
+        id: "kafka-cheatsheet",
+        title: "Kafka cheat sheet",
+        level: "easy",
+        minutes: 6,
+        body: `
+<h2>Kafka quick reference</h2>
+<h3>Concepts</h3>
+<table class="tbl"><thead><tr><th>Term</th><th>One-liner</th></tr></thead><tbody>
+<tr><td>Topic</td><td>named stream of messages</td></tr>
+<tr><td>Partition</td><td>a topic split for parallelism; ordering is per-partition</td></tr>
+<tr><td>Offset</td><td>a message's position in a partition</td></tr>
+<tr><td>Consumer group</td><td>consumers sharing the work of a topic</td></tr>
+<tr><td>Lag</td><td>unread messages (consumer behind)</td></tr>
+<tr><td>Replication factor</td><td>copies of each partition (durability)</td></tr>
+</tbody></table>
+<h3>CLI</h3>
+<div class="codeblock">kafka-topics.sh --create --topic t --partitions 3 --bootstrap-server localhost:9092
+kafka-topics.sh --describe --topic t --bootstrap-server localhost:9092
+kafka-console-producer.sh --topic t --bootstrap-server localhost:9092
+kafka-console-consumer.sh --topic t --from-beginning --bootstrap-server localhost:9092
+kafka-consumer-groups.sh --describe --group g --bootstrap-server localhost:9092</div>
+<h3>Producer knobs</h3>
+<table class="tbl"><thead><tr><th>Setting</th><th>Effect</th></tr></thead><tbody>
+<tr><td><code>key</code></td><td>same key → same partition (ordering)</td></tr>
+<tr><td><code>acks</code></td><td>0 / 1 / all → speed vs durability</td></tr>
+<tr><td><code>enable.idempotence</code></td><td>no duplicate messages on retry</td></tr>
+</tbody></table>
+<div class="callout warn"><strong>Delivery:</strong> at-least-once is the common default (commit after processing + make it idempotent). Exactly-once needs transactions.</div>
+`,
+      },
     ],
   },
 
@@ -1832,6 +1970,34 @@ con.cursor().execute("SELECT COUNT(*) FROM orders")</div>
   <li>Analysts &amp; dashboards query the clean tables.</li>
 </ol>
 <div class="callout tip"><strong>Recap:</strong> Work in Snowsight worksheets (set role + warehouse), script with SnowSQL, connect from Python/Spark/Airflow/BI. The rhythm is load raw → transform with SQL → serve clean tables.</div>
+`,
+      },
+      {
+        id: "snowflake-cheatsheet",
+        title: "Snowflake SQL cheat sheet",
+        level: "easy",
+        minutes: 6,
+        body: `
+<h2>Snowflake quick reference</h2>
+<h3>Context &amp; objects</h3>
+<div class="codeblock">USE ROLE analyst; USE WAREHOUSE wh; USE DATABASE db; USE SCHEMA public;
+CREATE DATABASE db;  CREATE SCHEMA db.public;
+CREATE WAREHOUSE wh WAREHOUSE_SIZE='XSMALL' AUTO_SUSPEND=60 AUTO_RESUME=TRUE;
+CREATE TABLE orders (id INT, product STRING, amount NUMBER, ts DATE);</div>
+<h3>Load data</h3>
+<div class="codeblock">CREATE STAGE s URL='s3://bucket/' FILE_FORMAT=(TYPE=PARQUET);
+COPY INTO orders FROM @s FILE_FORMAT=(TYPE=PARQUET) ON_ERROR='CONTINUE';
+-- semi-structured JSON:
+SELECT raw:customer.name::string AS name FROM events;</div>
+<h3>Analytics SQL</h3>
+<div class="codeblock">SELECT product, SUM(amount) rev FROM orders GROUP BY product ORDER BY rev DESC;
+SELECT *, RANK() OVER (PARTITION BY country ORDER BY amount DESC) rnk FROM orders;
+SELECT * FROM orders o JOIN customers c ON o.cust_id = c.id;</div>
+<h3>Superpowers</h3>
+<div class="codeblock">SELECT * FROM orders AT(OFFSET => -3600);   -- time travel (1h ago)
+UNDROP TABLE orders;                          -- restore dropped table
+CREATE TABLE orders_dev CLONE orders;         -- zero-copy clone</div>
+<div class="callout warn"><strong>Cost:</strong> compute (warehouses) is the main bill — <code>AUTO_SUSPEND</code> everything, right-size, use resource monitors.</div>
 `,
       },
     ],
