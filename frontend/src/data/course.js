@@ -378,6 +378,41 @@ export const TRACKS = [
 <div class="callout tip"><strong>Recap:</strong> Data quality = completeness, uniqueness, validity, accuracy, consistency, timeliness. Test at ingest, during transforms, and after load — and make failures loud.</div>
 `,
       },
+      {
+        id: "de-workflow",
+        title: "How data engineers actually work (day-to-day)",
+        level: "medium",
+        minutes: 10,
+        body: `
+<h2>The real working style</h2>
+<p>Beyond the tools, this is how the job actually flows — the habits and setup used every day.</p>
+<h3>A typical day</h3>
+<ol>
+  <li>Check overnight pipeline runs (Airflow UI) — anything red?</li>
+  <li>Fix/backfill any failures; answer "why is this number wrong?" questions.</li>
+  <li>Build a new pipeline or transformation on a <strong>branch</strong>.</li>
+  <li>Test locally, open a <strong>pull request</strong>, get review, merge → CI/CD deploys it.</li>
+  <li>Monitor the new pipeline's first production runs.</li>
+</ol>
+<h3>The everyday toolbox</h3>
+<ul>
+  <li><strong>Git</strong> — all pipelines/DAGs live in version control. You branch, commit, PR.</li>
+  <li><strong>Docker</strong> — run Airflow/Spark/Kafka locally the same way as prod.</li>
+  <li><strong>CI/CD</strong> (GitHub Actions, GitLab CI) — tests run on every PR; merge auto-deploys DAGs.</li>
+  <li><strong>Notebooks</strong> (Jupyter) — explore data before writing the real job.</li>
+  <li><strong>The terminal</strong> — you live in it: <code>git</code>, <code>docker</code>, <code>airflow</code>, <code>spark-submit</code>, SQL clients.</li>
+</ul>
+<h3>Local → production</h3>
+<div class="diagram">
+  <div class="node" style="background:#13263f;color:#6c8cff">Explore<br/><small>notebook</small></div><span class="arrow">→</span>
+  <div class="node" style="background:#3a2f16;color:#f5b74e">Build<br/><small>code + tests</small></div><span class="arrow">→</span>
+  <div class="node" style="background:#2a2140;color:#b98bff">PR + review</div><span class="arrow">→</span>
+  <div class="node" style="background:#12352a;color:#3ddc97">Deploy<br/><small>CI/CD</small></div>
+</div>
+<div class="callout warn"><strong>Golden habit:</strong> never hand-edit data or run scripts straight on prod. Everything goes through code + git + review, so it's repeatable and reviewable.</div>
+<div class="callout tip"><strong>Recap:</strong> The working style is engineering discipline applied to data — version control, containers, tests, CI/CD, and monitoring. The tools change; these habits don't.</div>
+`,
+      },
     ],
   },
 
@@ -745,6 +780,45 @@ with TaskGroup("ingest") as ingest:
 <div class="callout tip"><strong>Recap:</strong> Use dynamic task mapping (<code>.expand()</code>) for runtime-sized workloads, Task Groups to keep big DAGs readable, and DAG factories to generate many similar pipelines from config.</div>
 `,
       },
+      {
+        id: "airflow-running",
+        title: "Running Airflow: setup, CLI & the UI (working style)",
+        level: "medium",
+        minutes: 11,
+        body: `
+<h2>Actually running Airflow</h2>
+<h3>1. Get it running (fastest ways)</h3>
+<div class="codeblock"># Quick single-machine dev:
+pip install apache-airflow
+airflow standalone      # starts scheduler + webserver + a login
+
+# Realistic (like production): Docker Compose
+curl -LfO 'https://airflow.apache.org/docs/apache-airflow/stable/docker-compose.yaml'
+docker compose up</div>
+<p>Drop your DAG <code>.py</code> files into the <code>dags/</code> folder — the scheduler auto-detects them.</p>
+<h3>2. The CLI you'll use daily</h3>
+<div class="codeblock">airflow dags list                 # all DAGs
+airflow dags test my_pipeline 2024-01-01   # run a DAG once, locally, no scheduler
+airflow tasks test my_pipeline extract 2024-01-01  # run ONE task
+airflow dags trigger my_pipeline  # kick off a run now
+airflow dags backfill -s 2024-01-01 -e 2024-01-07 my_pipeline</div>
+<div class="callout tip"><code>airflow dags test</code> is your best friend — it runs the whole DAG in your terminal so you can debug before deploying.</div>
+<h3>3. Reading the UI</h3>
+<ul>
+  <li><strong>Grid view</strong> — every run × task as coloured squares (green=success, red=failed, yellow=running).</li>
+  <li>Click a red square → <strong>Logs</strong> to see the traceback.</li>
+  <li><strong>Graph view</strong> — the DAG's task dependencies.</li>
+  <li>Use <strong>Clear</strong> to re-run a failed task after a fix.</li>
+</ul>
+<h3>4. Debugging failures</h3>
+<ol>
+  <li>Grid view → find the red task → open Logs.</li>
+  <li>Read the traceback (usually a missing connection, bad SQL, or timeout).</li>
+  <li>Fix the code → push → Clear the task to retry.</li>
+</ol>
+<div class="callout"><strong>Recap:</strong> <code>airflow standalone</code> or Docker to run it; <code>dags test</code>/<code>tasks test</code> to debug locally; the Grid view + Logs to monitor and fix in production.</div>
+`,
+      },
     ],
   },
 
@@ -1090,6 +1164,48 @@ df.write.mode("append").format("snowflake").options(**opts).save()</div>
 <div class="callout tip"><strong>Recap:</strong> <code>read.format(...).load()</code> in, <code>write.format(...).mode(...).save()</code> out. Prefer Parquet, define schemas in production, and choose the save mode deliberately.</div>
 `,
       },
+      {
+        id: "spark-running",
+        title: "Running PySpark: setup, spark-submit & the UI (working style)",
+        level: "medium",
+        minutes: 11,
+        body: `
+<h2>Actually running Spark</h2>
+<h3>1. Install &amp; start a session</h3>
+<div class="codeblock">pip install pyspark
+
+from pyspark.sql import SparkSession
+spark = (SparkSession.builder
+    .appName("my_job")
+    .master("local[*]")        # use all local cores; "yarn"/"k8s" in prod
+    .getOrCreate())</div>
+<p><code>local[*]</code> runs Spark on your laptop — perfect for learning. The same code runs on a huge cluster by changing <code>master</code>.</p>
+<h3>2. Two ways to run</h3>
+<ul>
+  <li><strong>Interactive</strong> — a notebook or <code>pyspark</code> shell while exploring.</li>
+  <li><strong>Production</strong> — a script submitted with <code>spark-submit</code>:</li>
+</ul>
+<div class="codeblock">spark-submit \\
+  --master yarn \\
+  --executor-memory 4g \\
+  --num-executors 10 \\
+  my_job.py</div>
+<h3>3. The knobs that matter</h3>
+<table class="tbl">
+  <thead><tr><th>Setting</th><th>What it controls</th></tr></thead>
+  <tbody>
+    <tr><td><code>--num-executors</code></td><td>how many workers</td></tr>
+    <tr><td><code>--executor-memory</code></td><td>RAM per worker</td></tr>
+    <tr><td><code>--executor-cores</code></td><td>parallel tasks per worker</td></tr>
+    <tr><td><code>spark.sql.shuffle.partitions</code></td><td>partitions after a shuffle (default 200)</td></tr>
+  </tbody>
+</table>
+<h3>4. The Spark UI (port 4040)</h3>
+<p>While a job runs, open <code>localhost:4040</code> to see <strong>Jobs → Stages → Tasks</strong>, shuffle sizes, and which stage is slow. It's how you diagnose performance.</p>
+<div class="callout warn"><strong>Common errors:</strong> <code>OutOfMemoryError</code> (raise executor memory or reduce partition size), and slow "straggler" tasks (data skew — see the performance lesson).</div>
+<div class="callout"><strong>Recap:</strong> <code>SparkSession</code> with <code>local[*]</code> to learn; <code>spark-submit</code> with executor settings for prod; the port-4040 UI to watch and tune jobs.</div>
+`,
+      },
     ],
   },
 
@@ -1397,6 +1513,43 @@ query = (agg.writeStream.outputMode("complete")
 <div class="callout tip"><strong>Recap:</strong> The Schema Registry enforces message contracts so producers and consumers evolve safely; Avro gives compact, typed, evolvable messages; dead-letter topics catch bad records without stopping the pipeline.</div>
 `,
       },
+      {
+        id: "kafka-running",
+        title: "Running Kafka: CLI & operations (working style)",
+        level: "medium",
+        minutes: 11,
+        body: `
+<h2>Actually running Kafka</h2>
+<h3>1. Start a broker (Docker is easiest)</h3>
+<div class="codeblock"># Modern Kafka (KRaft mode, no ZooKeeper) via Docker:
+docker run -p 9092:9092 apache/kafka:latest</div>
+<h3>2. The CLI commands you'll use constantly</h3>
+<div class="codeblock"># create a topic with 3 partitions
+kafka-topics.sh --create --topic orders \\
+  --partitions 3 --bootstrap-server localhost:9092
+
+# list / describe topics
+kafka-topics.sh --list --bootstrap-server localhost:9092
+kafka-topics.sh --describe --topic orders --bootstrap-server localhost:9092
+
+# produce messages from the terminal
+kafka-console-producer.sh --topic orders --bootstrap-server localhost:9092
+
+# consume messages
+kafka-console-consumer.sh --topic orders --from-beginning \\
+  --bootstrap-server localhost:9092</div>
+<h3>3. Watching consumer groups &amp; lag</h3>
+<p><strong>Lag</strong> = how far behind a consumer is (unread messages). It's the #1 health metric.</p>
+<div class="codeblock">kafka-consumer-groups.sh --describe --group analytics \\
+  --bootstrap-server localhost:9092
+# shows CURRENT-OFFSET, LOG-END-OFFSET, LAG per partition</div>
+<div class="callout warn"><strong>Rising lag</strong> = consumers can't keep up. Fix by adding consumers to the group (up to the partition count) or making processing faster.</div>
+<h3>4. In code (Python)</h3>
+<div class="codeblock">pip install kafka-python
+# then use KafkaProducer / KafkaConsumer (see the producer/consumer lessons)</div>
+<div class="callout"><strong>Recap:</strong> Docker to run a broker; <code>kafka-topics</code>, <code>kafka-console-producer/consumer</code>, and <code>kafka-consumer-groups</code> to operate it; watch <strong>lag</strong> to know if consumers are keeping up.</div>
+`,
+      },
     ],
   },
 
@@ -1643,6 +1796,42 @@ GRANT ROLE analyst TO USER maya;</div>
 </ul>
 <div class="callout warn"><strong>Classic bill shock:</strong> a huge warehouse left running overnight, or <code>AUTO_SUSPEND</code> disabled. Always set auto-suspend.</div>
 <div class="callout tip"><strong>Recap:</strong> Grant access via roles (RBAC), not to individuals. Compute is the main cost — auto-suspend, right-size, and use resource monitors to keep the bill predictable.</div>
+`,
+      },
+      {
+        id: "snowflake-working",
+        title: "Working in Snowflake: worksheets, SnowSQL & connectors (working style)",
+        level: "medium",
+        minutes: 10,
+        body: `
+<h2>Actually working in Snowflake</h2>
+<h3>1. Sign up &amp; the web UI (Snowsight)</h3>
+<p>Snowflake has a <strong>free 30-day trial</strong>. You mostly work in <strong>Snowsight</strong> — the web UI — writing SQL in <strong>worksheets</strong>. Pick a <em>role</em> and a <em>warehouse</em> at the top, then run queries.</p>
+<h3>2. The session context (always set these)</h3>
+<div class="codeblock">USE ROLE analyst;
+USE WAREHOUSE analytics_wh;
+USE DATABASE sales_db;
+USE SCHEMA public;
+
+SELECT * FROM orders LIMIT 10;</div>
+<h3>3. SnowSQL — the command-line client</h3>
+<div class="codeblock">snowsql -a &lt;account&gt; -u &lt;user&gt;
+# then run SQL, or scripts:
+snowsql -f load_orders.sql</div>
+<h3>4. Connecting from code</h3>
+<div class="codeblock"># Python
+pip install snowflake-connector-python
+import snowflake.connector
+con = snowflake.connector.connect(user=..., password=..., account=...)
+con.cursor().execute("SELECT COUNT(*) FROM orders")</div>
+<p>Spark uses the Spark–Snowflake connector; Airflow uses the <code>SnowflakeOperator</code>; BI tools (Tableau, Power BI) connect directly.</p>
+<h3>5. The daily loop</h3>
+<ol>
+  <li>Load raw data (COPY / Snowpipe) into a raw table.</li>
+  <li>Transform with SQL (often via <strong>dbt</strong>) into clean star-schema tables.</li>
+  <li>Analysts &amp; dashboards query the clean tables.</li>
+</ol>
+<div class="callout tip"><strong>Recap:</strong> Work in Snowsight worksheets (set role + warehouse), script with SnowSQL, connect from Python/Spark/Airflow/BI. The rhythm is load raw → transform with SQL → serve clean tables.</div>
 `,
       },
     ],
