@@ -73,7 +73,7 @@ export default function Workspace() {
   const [stages, setStages] = useState(() => template.stages.map((s) => ({ ...s })));
   const [orch, setOrch] = useState(() => ({ ...template.orchestrator }));
   const [config, setConfig] = useState({ loadMode: "append", injectFail: "" });
-  const [selected, setSelected] = useState(template.stages[0].key);
+  const [selected, setSelected] = useState(template.stages[0]?.key ?? "orchestrator");
   const [status, setStatus] = useState({});
   const [metrics, setMetrics] = useState({});
   const [logs, setLogs] = useState([]);
@@ -117,7 +117,7 @@ export default function Workspace() {
     setStages(template.stages.map((s) => ({ ...s })));
     setOrch({ ...template.orchestrator });
     setConfig({ loadMode: "append", injectFail: "" });
-    setSelected(template.stages[0].key);
+    setSelected(template.stages[0]?.key ?? "orchestrator");
     setStatus({}); setMetrics({}); setLogs([]); setChart(null); setWarehouse(null);
   }, [template, projectId]);
 
@@ -363,6 +363,9 @@ export default function Workspace() {
         <div className="diagram mt-2" style={{ marginBottom: 0, borderStyle: "solid" }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => { if (typeof dragIndex.current === "string" && dragIndex.current.startsWith("add:")) { addStage(dragIndex.current.slice(4)); dragIndex.current = null; } }}>
+          {stages.length === 0 && (
+            <span className="muted" style={{ fontSize: 13, padding: "6px 0" }}>Empty pipeline — add stages from the palette above ↑</span>
+          )}
           {stages.map((b, i) => (
             <div key={b.key}
               draggable={!running}

@@ -9,6 +9,19 @@ export default function Capstones() {
       <h1>🏆 Capstone projects</h1>
       <p>Pick a project and build it in the Project Builder — write real code in each stage and run the whole pipeline.</p>
 
+      <Link to="/app/workspace?template=blank" className="card card-hover mt-2 row between wrap"
+        style={{ borderColor: "var(--brand)", background: "linear-gradient(135deg,#171b2e,#1c1730)" }}>
+        <div className="row" style={{ gap: 12 }}>
+          <div style={{ fontSize: 30 }}>🧩</div>
+          <div>
+            <h3 style={{ margin: 0 }}>Start a blank pipeline</h3>
+            <span className="muted" style={{ fontSize: 13 }}>Empty canvas — drag & drop your own stages (Kafka, Spark, Data quality, Snowflake)</span>
+          </div>
+        </div>
+        <span className="btn btn-primary">+ New blank →</span>
+      </Link>
+
+      <h2 className="mt-4">Or start from a template</h2>
       <div className="grid grid-2 mt-2">
         {CAPSTONES.map((c) => (
           <div key={c.id} className="card">

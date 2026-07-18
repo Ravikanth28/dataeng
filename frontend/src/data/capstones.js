@@ -295,7 +295,33 @@ ORDER BY revenue DESC;`,
   },
 ];
 
+// An empty canvas — the user adds every stage themselves.
+export const BLANK_TEMPLATE = {
+  id: "blank",
+  title: "My Pipeline",
+  icon: "🧩",
+  difficulty: "custom",
+  description: "Start from scratch — add stages yourself.",
+  orchestrator: {
+    label: "Airflow DAG", icon: "🗓️",
+    code: `from datetime import timedelta
+
+# Airflow retry policy — applied to every task in the DAG
+default_args = {
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+}
+
+tasks = []
+edges = []
+schedule = "@daily"`,
+  },
+  dimensions: {},
+  stages: [],
+};
+
 export function getCapstone(id) {
+  if (id === "blank") return BLANK_TEMPLATE;
   return CAPSTONES.find((c) => c.id === id) || CAPSTONES[0];
 }
 
