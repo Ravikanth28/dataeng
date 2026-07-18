@@ -9,6 +9,16 @@ import { CAPSTONES, getCapstone } from "../data/capstones.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Airflow schedule presets (cron's finest granularity is per-minute).
+const SCHEDULE_OPTIONS = [
+  { label: "Every minute", value: "* * * * *" },
+  { label: "Every 5 minutes", value: "*/5 * * * *" },
+  { label: "Every 15 minutes", value: "*/15 * * * *" },
+  { label: "Hourly", value: "@hourly" },
+  { label: "Daily", value: "@daily" },
+  { label: "Weekly", value: "@weekly" },
+];
+
 function parseArrayLiteral(code, name) {
   const m = code.match(new RegExp(`${name}\\s*=\\s*(\\[[\\s\\S]*?\\])`, "m"));
   if (!m) return null;
@@ -96,6 +106,22 @@ export default function Workspace() {
   const setStageCode = (key, code) => setStages((s) => s.map((st) => (st.key === key ? { ...st, code } : st)));
   const setSt = (key, val) => setStatus((s) => ({ ...s, [key]: val }));
   const setMetric = (key, val) => setMetrics((m) => ({ ...m, [key]: val }));
+
+  // These dropdowns write straight into the Airflow DAG code (auto-sync).
+  const setDagSchedule = (val) =>
+    setOrch((o) => ({
+      ...o,
+      code: /schedule\s*=\s*"[^"]*"/.test(o.code)
+        ? o.code.replace(/schedule\s*=\s*"[^"]*"/, `schedule = "${val}"`)
+        : o.code.trimEnd() + `\nschedule = "${val}"`,
+    }));
+  const setDagRetries = (n) =>
+    setOrch((o) => ({
+      ...o,
+      code: /retries"?\s*[:=]\s*\d+/.test(o.code)
+        ? o.code.replace(/(retries"?\s*[:=]\s*)\d+/, `$1${n}`)
+        : o.code,
+    }));
 
   const runPipeline = async () => {
     setRunning(true); setLogs([]); setStatus({}); setMetrics({}); setChart(null); setWarehouse(null);
@@ -239,15 +265,23 @@ export default function Workspace() {
         <div className="row between wrap" style={{ gap: 10 }}>
           <button onClick={() => setSelected("orchestrator")} className="pill"
             style={{ color: "#6c8cff", borderColor: editingOrch ? "#6c8cff" : "rgba(108,140,255,.4)", cursor: "pointer", background: editingOrch ? "var(--surface-2)" : undefined }}>
-            🗓️ Airflow · {schedule}
+            🗓️ Airflow DAG (edit)
             <span style={{ marginLeft: 6, width: 8, height: 8, borderRadius: "50%", background: dot(status.orchestrator), display: "inline-block" }} />
           </button>
-          {/* Pipeline config */}
+          {/* Pipeline config — these dropdowns write straight into the DAG code */}
           <div className="row wrap" style={{ gap: 12, fontSize: 12, alignItems: "center" }}>
-            <button className="pill" onClick={() => setSelected("orchestrator")} title="Set in the Airflow DAG default_args" style={{ cursor: "pointer" }}>
-              🔁 retries: <strong style={{ color: "var(--text)" }}>{retries}</strong> <span className="muted">· set in DAG</span>
-            </button>
-            <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>Load mode
+            <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>🗓️ Schedule
+              <select value={schedule} onChange={(e) => setDagSchedule(e.target.value)} className="input" style={{ width: 150 }}>
+                {!SCHEDULE_OPTIONS.some((o) => o.value === schedule) && <option value={schedule}>current: {schedule}</option>}
+                {SCHEDULE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
+            <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>🔁 Retries
+              <select value={retries} onChange={(e) => setDagRetries(+e.target.value)} className="input" style={{ width: 62 }}>
+                {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>❄️ Load mode
               <select value={config.loadMode} onChange={(e) => setConfig({ ...config, loadMode: e.target.value })} className="input" style={{ width: 116 }}>
                 <option value="append">append</option><option value="overwrite">overwrite</option><option value="merge">merge</option>
               </select>
