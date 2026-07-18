@@ -285,7 +285,7 @@ export const TRACKS = [
 <p>What happens when a customer moves city? A <strong>Type 1</strong> SCD overwrites the old value; a <strong>Type 2</strong> keeps history by adding a new row with valid-from/valid-to dates. This is how warehouses track change over time.</p>
 
 <div class="callout tip"><strong>Fact</strong> = "what happened" (numbers you sum). <strong>Dimension</strong> = "the who/what/when/where" you group by.</div>
-<div class="callout"><strong>Recap:</strong> ETL transforms before loading; ELT loads then transforms in the warehouse (modern default). Model data as facts + dimensions (star schema) so analytics stay fast and intuitive.</div>
+<div class="callout tip">🧪 <strong>Now practise:</strong> build a star-schema aggregation (facts + dimensions) — the classic ELT transform — in the lab below.</div>
 `,
         practice: {
           type: "python",
@@ -721,7 +721,7 @@ etl()</div>
     <tr><td><code>*/15 * * * *</code></td><td>every 15 minutes</td></tr>
   </tbody>
 </table>
-<div class="callout tip"><strong>Recap:</strong> The schedule + start_date decide when a DAG runs. Cron gives precise control; <code>catchup</code> decides whether missed intervals get back-run. Default to <code>catchup=False</code>.</div>
+<div class="callout tip">🧪 <strong>Now practise:</strong> define a daily DAG's tasks and dependencies in the lab below.</div>
 `,
         practice: {
           type: "dag",
@@ -1205,7 +1205,7 @@ big.join(broadcast(small), "id")</div>
   <li>Huge "Shuffle Read/Write" numbers → too much shuffling.</li>
   <li>Lots of tiny tasks → too many small partitions (coalesce them).</li>
 </ul>
-<div class="callout tip"><strong>Recap:</strong> Speed comes from doing less work and moving less data. Filter early, minimize shuffles, broadcast small tables, cache what you reuse, fix skew, and store columnar (Parquet).</div>
+<div class="callout tip">🧪 <strong>Now practise:</strong> pre-aggregate data to cut down data movement (shuffles) in the lab below.</div>
 `,
         practice: {
           type: "python",
@@ -1543,7 +1543,7 @@ for msg in consumer:
   <li><strong>Exactly-once</strong> — transactions + idempotent producer (strongest, more setup).</li>
 </ul>
 <div class="callout tip"><strong>auto_offset_reset</strong> only matters when the group has <em>no</em> committed offset yet: <code>earliest</code> = from the start, <code>latest</code> = only new messages.</div>
-<div class="callout"><strong>Recap:</strong> Consumers track their position with committed offsets. Commit <em>after</em> processing for at-least-once (and make processing idempotent). Scale by adding consumers to the same group.</div>
+<div class="callout tip">🧪 <strong>Now practise:</strong> consume a partitioned stream and watch offset ordering in the lab below.</div>
 `,
         practice: {
           type: "kafka",
@@ -1928,7 +1928,7 @@ UNDROP TABLE orders;                          -- bring back a dropped table</div
 <h3>🤝 Secure data sharing</h3>
 <p>Share live tables with another Snowflake account — no copying, no ETL. They query your data directly (governed by you).</p>
 <div class="callout tip">Time Travel + cloning make Snowflake incredibly safe to experiment on: clone prod, break things, throw it away — the original is untouched.</div>
-<div class="callout"><strong>Recap:</strong> Time Travel = query/restore past data (undo mistakes); zero-copy cloning = instant free copies for dev/test; secure sharing = give others live access with no ETL. These are Snowflake's standout features.</div>
+<div class="callout tip">🧪 <strong>Now practise:</strong> run analytical SQL with a join and window function in the lab below.</div>
 `,
         practice: {
           type: "sql",
