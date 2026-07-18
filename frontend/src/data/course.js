@@ -287,6 +287,21 @@ export const TRACKS = [
 <div class="callout tip"><strong>Fact</strong> = "what happened" (numbers you sum). <strong>Dimension</strong> = "the who/what/when/where" you group by.</div>
 <div class="callout"><strong>Recap:</strong> ETL transforms before loading; ELT loads then transforms in the warehouse (modern default). Model data as facts + dimensions (star schema) so analytics stay fast and intuitive.</div>
 `,
+        practice: {
+          type: "python",
+          title: "Lab: build a fact aggregation (star schema)",
+          instructions: "Join the orders fact with a product dimension and aggregate revenue by category — the classic ELT transform. Real Python; press Run.",
+          starter: `import pandas as pd
+
+# fact table + dimension table
+orders = pd.DataFrame({"product": ["Laptop","Phone","Tablet","Phone","Laptop"], "amount": [1200,800,300,800,1200]})
+products = pd.DataFrame({"product": ["Laptop","Phone","Tablet"], "category": ["Computers","Mobile","Mobile"]})
+
+joined = orders.merge(products, on="product")
+result = (joined.groupby("category")["amount"].sum()
+            .reset_index(name="revenue").sort_values("revenue", ascending=False))
+print(result.to_string(index=False))`,
+        },
       },
       {
         id: "file-formats",
@@ -708,6 +723,17 @@ etl()</div>
 </table>
 <div class="callout tip"><strong>Recap:</strong> The schedule + start_date decide when a DAG runs. Cron gives precise control; <code>catchup</code> decides whether missed intervals get back-run. Default to <code>catchup=False</code>.</div>
 `,
+        practice: {
+          type: "dag",
+          title: "Lab: build a daily ETL DAG",
+          instructions: "Define the tasks and dependencies for a daily pipeline, then press Run to watch it execute in order.",
+          starter: `tasks = ["extract", "transform", "load", "notify"]
+edges = [
+    ["extract", "transform"],
+    ["transform", "load"],
+    ["load", "notify"],
+]`,
+        },
       },
       {
         id: "airflow-retries-sensors",
@@ -1181,6 +1207,19 @@ big.join(broadcast(small), "id")</div>
 </ul>
 <div class="callout tip"><strong>Recap:</strong> Speed comes from doing less work and moving less data. Filter early, minimize shuffles, broadcast small tables, cache what you reuse, fix skew, and store columnar (Parquet).</div>
 `,
+        practice: {
+          type: "python",
+          title: "Lab: aggregate to reduce data movement",
+          instructions: "Pre-aggregate a dataset by region (less data downstream = fewer shuffles). Real Python; press Run.",
+          starter: `import pandas as pd
+df = pd.DataFrame({
+    "region": ["US","IN","US","UK","IN","US","UK"],
+    "amount": [100,200,150,300,250,120,80],
+})
+result = (df.groupby("region")["amount"].sum()
+            .reset_index(name="total").sort_values("total", ascending=False))
+print(result.to_string(index=False))`,
+        },
       },
       {
         id: "spark-streaming",
@@ -1506,6 +1545,19 @@ for msg in consumer:
 <div class="callout tip"><strong>auto_offset_reset</strong> only matters when the group has <em>no</em> committed offset yet: <code>earliest</code> = from the start, <code>latest</code> = only new messages.</div>
 <div class="callout"><strong>Recap:</strong> Consumers track their position with committed offsets. Commit <em>after</em> processing for at-least-once (and make processing idempotent). Scale by adding consumers to the same group.</div>
 `,
+        practice: {
+          type: "kafka",
+          title: "Lab: consume a partitioned stream",
+          instructions: "Define the events; press Run to watch them route to partitions by key and get consumed in offset order (same key stays ordered).",
+          starter: `messages = [
+    {"key": "order1", "value": "created"},
+    {"key": "order1", "value": "paid"},
+    {"key": "order2", "value": "created"},
+    {"key": "order2", "value": "paid"},
+    {"key": "order1", "value": "shipped"},
+]
+partitions = 2`,
+        },
       },
       {
         id: "kafka-replication",
@@ -1878,6 +1930,18 @@ UNDROP TABLE orders;                          -- bring back a dropped table</div
 <div class="callout tip">Time Travel + cloning make Snowflake incredibly safe to experiment on: clone prod, break things, throw it away — the original is untouched.</div>
 <div class="callout"><strong>Recap:</strong> Time Travel = query/restore past data (undo mistakes); zero-copy cloning = instant free copies for dev/test; secure sharing = give others live access with no ETL. These are Snowflake's standout features.</div>
 `,
+        practice: {
+          type: "sql",
+          title: "Lab: analytical SQL with a join",
+          instructions: "Runs REAL SQL against seeded customers/products/orders tables. Join orders with customers and rank countries by revenue. Press Run.",
+          starter: `SELECT c.country,
+       SUM(o.amount) AS revenue,
+       RANK() OVER (ORDER BY SUM(o.amount) DESC) AS rnk
+FROM orders o
+JOIN customers c ON o.customer_id = c.id
+GROUP BY c.country
+ORDER BY revenue DESC;`,
+        },
       },
       {
         id: "snowflake-integration",

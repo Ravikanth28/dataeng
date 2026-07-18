@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Catalog from "./pages/Catalog.jsx";
 import Module from "./pages/Module.jsx";
 import Lesson from "./pages/Lesson.jsx";
+import QuizPage from "./pages/QuizPage.jsx";
 import Workspace from "./pages/Workspace.jsx";
 import Capstones from "./pages/Capstones.jsx";
 import Projects from "./pages/Projects.jsx";
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="catalog" element={<Catalog />} />
         <Route path="track/:trackId" element={<Module />} />
+        <Route path="quiz/:trackId" element={<QuizPage />} />
         <Route path="lesson/:lessonId" element={<Lesson />} />
         <Route path="capstones" element={<Capstones />} />
         <Route path="workspace" element={<Workspace />} />

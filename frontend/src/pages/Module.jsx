@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useCourse } from "../context/CourseContext.jsx";
 import { useProgress } from "../lib/useProgress.js";
+import { QUIZZES } from "../data/quizzes.js";
 
 const levelClass = { easy: "pill-easy", medium: "pill-medium", advanced: "pill-advanced" };
 
@@ -58,6 +59,22 @@ export default function Module() {
           );
         })}
       </div>
+
+      {QUIZZES[trackId] && (
+        <Link to={`/app/quiz/${trackId}`} className="card card-hover mt-3 row between wrap"
+          style={{ borderColor: completed.has(`quiz-${trackId}`) ? "var(--accent)" : "var(--brand)" }}>
+          <div className="row" style={{ gap: 12 }}>
+            <div style={{ fontSize: 26 }}>🧠</div>
+            <div>
+              <h3 style={{ margin: 0 }}>Track quiz</h3>
+              <span className="muted" style={{ fontSize: 13 }}>{QUIZZES[trackId].length} questions · test what you learned</span>
+            </div>
+          </div>
+          <span className={`btn ${completed.has(`quiz-${trackId}`) ? "btn-success" : "btn-primary"}`}>
+            {completed.has(`quiz-${trackId}`) ? "✓ Passed — retake" : "Take quiz →"}
+          </span>
+        </Link>
+      )}
     </div>
   );
 }
